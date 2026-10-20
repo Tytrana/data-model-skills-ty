@@ -1,21 +1,21 @@
 ---
-name: discover-data-model-ty
+name: discover-data-model
 description: >-
   Walks any SQL Server or Azure SQL database one read-only catalog query at a
   time and writes a complete structural data model from the results the user
   pastes back. Use when the user asks to discover a database, build or refresh
   a data model from the live schema, catalog tables and columns, or run the
   data-model discovery steps. Do not use it to look up rows in a database that
-  already has a data model — that is sql-from-data-model-ty.
+  already has a data model — that is sql-from-data-model.
 ---
 
-# Discover Data Model (Ty)
+# Discover Data Model
 
 Build a structural data model of a SQL Server database by handing the user **one catalog query per turn**, waiting for the result, then continuing. The queries are general: they read `sys.*` only and work on any SQL Server or Azure SQL database. They do not name application tables.
 
 You do not run the SQL. The user runs it in DBeaver (or any SQL Server client) and pastes or attaches the grid.
 
-This skill **creates** the data model. Looking up rows in an existing model is `sql-from-data-model-ty`, not this skill. Both skills are in this repo. The data model file is not. Save it only at a path the user names outside this repository. If they name a path inside this repo, ask for a path outside it.
+This skill **creates** the data model. Looking up rows in an existing model is `sql-from-data-model`, not this skill. Both skills are in this repo. The data model file is not. Save it only at a path the user names outside this repository. If they name a path inside this repo, ask for a path outside it.
 
 ## Non-negotiable
 
@@ -24,7 +24,7 @@ This skill **creates** the data model. Looking up rows in an existing model is `
 3. **Advance only after a usable result.** Interpret the grid in a few sentences, apply that step's gate, then either repeat the same step or give the next one.
 4. **Read-only.** These scripts are `SELECT` against catalog views. Do not write `INSERT` / `UPDATE` / `DELETE` / `MERGE` / `TRUNCATE` / `ALTER` / `DROP` / `CREATE` / `EXEC`.
 5. **Facts come from the grids.** When you write the data model, every table, column, type, key, and count must appear in a result the user returned this run. Do not fill gaps from memory, an older data-model file, or a previous chat.
-6. **SQL Server only.** If the user says the target is Postgres, MySQL, Oracle, or Snowflake, stop and say these scripts will not run there.
+6. **SQL Server and Azure SQL only.** If the user says the target is not SQL Server or Azure SQL, stop and say these scripts will not run there.
 7. **One database at a time.** Finish Steps 1–7 and write that database's data model before starting Step 1 on the next database. Do not ask for another database's grid in the middle of a pass.
 
 ## Start of a run
