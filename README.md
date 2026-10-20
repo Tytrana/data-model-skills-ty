@@ -1,9 +1,17 @@
 # SQL from a data model
 
-One agent skill, `/sql-from-data-model`, that answers plain-English questions about a SQL Server or Azure SQL database with read-only queries. It has two options:
+An agentic, read-only database assistant for SQL Server and Azure SQL. You ask a question in plain English, such as *How many orders does customer C-1001 have?*, and the agent does the database work from start to finish:
 
-- **Option A: Automatic.** The skill writes the query, runs it through dbvr, and shows the answer in the chat.
-- **Option B: Manual.** The skill writes the query. You run it in DBeaver and paste the result back.
+1. **Sets itself up.** It checks that dbvr is installed and every database can be reached. It opens a sign-in window for your username and password, never the chat. Then it proves the login can only read data.
+2. **Learns the database.** It runs 7 read-only catalog scripts and writes a data model: a map of every table, column, and key.
+3. **Answers.** It picks the right database and tables from the data model, writes the query, runs it, and checks its answer against the result before replying.
+
+It never changes data. The script refuses anything but `SELECT` and `WITH`, and every run first proves the login can't write. The agent doesn't guess either: it uses only tables and columns in the data model, and only values that came back from the database.
+
+It is one skill, `/sql-from-data-model`, with two options:
+
+- **Option A: Automatic.** The agent does all three steps above and answers in the chat. Needs dbvr.
+- **Option B: Manual.** The agent writes the query. You run it in DBeaver and paste the result back. Use this when you can't install dbvr.
 
 This skill replaces the earlier `/sql-from-data-model-manual` and `/discover-data-model` skills. The manual skill is now Option B. The discover steps are now part of the skill: Option A runs them for you, and Option B walks you through them when you don't have a data model yet.
 
