@@ -6,6 +6,30 @@ dbvr uses the `microsoft` driver and a SQL username and password. These skills d
 
 This repo does not include a data model. The default location is the `model_path` from `paths`, inside the settings folder, which is outside this repo. You can choose another path. Keep the data model outside this repo and do not commit it. Do not commit passwords or connection strings. Passwords are typed in the sign-in windows and stored only in the private `.env` file.
 
+## How they work together
+
+Every question needs a data model: a map of the database's tables, columns, and keys. Option A builds it during first-time setup. `/discover-data-model` builds it by hand, one catalog script at a time. Option B uses a model you already have.
+
+```mermaid
+flowchart TD
+  start["/sql-from-data-model"] --> menu{"Option A or B?"}
+
+  menu -->|"A: Automatic"| done{"Setup done?"}
+  done -->|No| setup["First-time setup<br/>1. Check dbvr and that each database can be reached<br/>2. Sign in through a window, never the chat<br/>3. Prove the login can only read data<br/>4. Build the data model"]
+  setup --> ask
+  done -->|Yes| ask["Ask a question in plain English"]
+  ask --> write["The skill writes a SELECT from the data model"]
+  write --> run["The script refuses anything but SELECT and WITH,<br/>then runs the query through dbvr"]
+  run --> answer["Answer in the chat:<br/>the exact table, the row count, and the query"]
+
+  menu -->|"B: Manual"| model[("Data model file")]
+  discover["/discover-data-model<br/>7 catalog scripts you run yourself"] --> model
+  model --> writeb["The skill writes a SELECT"]
+  writeb --> dbeaver["You run it in DBeaver<br/>and paste the result back"]
+```
+
+If dbvr is not available, Option A can build the data model from your code repos instead. It then writes the query but does not run it.
+
 ## Prerequisites
 
 - Python 3. The standard library is enough. Try `python3`, then `py -3`, then `python`.
