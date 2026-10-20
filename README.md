@@ -20,7 +20,8 @@ flowchart TD
   done -->|Yes| ask["Ask a question in plain English"]
   ask --> write["The skill writes a SELECT from the data model"]
   write --> run["The script refuses anything but SELECT and WITH,<br/>then runs the query through dbvr"]
-  run --> answer["Answer in the chat:<br/>the exact table, the row count, and the query"]
+  run --> verify["Check before sending<br/>Table pasted exactly as returned<br/>Row count from the script, not the agent<br/>Answer uses only values in the table<br/>Column meanings only from the data model or notes"]
+  verify --> answer["Answer in the chat:<br/>the exact table, the row count, and the query"]
 
   menu -->|"B: Manual"| model[("Data model file")]
   discover["/discover-data-model<br/>7 catalog scripts you run yourself"] --> model
