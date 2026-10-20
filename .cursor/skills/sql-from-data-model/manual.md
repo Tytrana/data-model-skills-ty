@@ -1,27 +1,12 @@
----
-name: sql-from-data-model-manual
-description: >-
-  Writes read-only SQL Server queries from a structural data model, including
-  any catalog produced by discover-data-model. Reads that model first and
-  uses only tables, columns, keys, and foreign keys documented there. The
-  user pastes the SQL into DBeaver and pastes the grid back. Use when the
-  user invokes /sql-from-data-model-manual, and when the user picks Option
-  B from /sql-from-data-model. Use model_path from setup when that file
-  exists; otherwise ask the user for the model file.
-disable-model-invocation: true
----
+# Option B — manual
 
-# SQL from Data Model — manual
-
-## When to run
-
-This skill is an entry point. Run it when the user invokes `/sql-from-data-model-manual`, and when they pick Option B from `/sql-from-data-model`. Both paths follow these same instructions.
+This is Option B of `/sql-from-data-model`. `SKILL.md` sends the user here when they pick B. Paths in this file are relative to the skill folder.
 
 The user gives a **scenario** (who or what they need to find or verify). You write **read-only SQL** they can paste into DBeaver. You do not run SQL against the database.
 
-This skill **reads** a data model. Building or refreshing that model is `discover-data-model`, not this skill.
+Option B **reads** a data model. If the user does not have one yet, build it by hand first with [catalog/build.md](catalog/build.md): the user runs 7 catalog scripts in DBeaver and pastes each result back. Then come back here.
 
-The model can be any file in the shape `discover-data-model` writes: one section per database, an Identity block, a table inventory, and per-table keys, foreign keys, checks, indexes, and columns. The SQL is general. The table names come from the file in front of you.
+The model can be any file in the shape `catalog/build.md` writes: one section per database, an Identity block, a table inventory, and per-table keys, foreign keys, checks, indexes, and columns. Option A writes the same shape. The SQL is general. The table names come from the file in front of you.
 
 ## Non-negotiable
 
@@ -31,13 +16,13 @@ The model can be any file in the shape `discover-data-model` writes: one section
 4. **One database per script.** Do not join across databases, even when two catalogs live in the same file.
 5. **DBeaver-safe scripts.** One result set per script. Do not chain `@sql` / `sp_executesql` across batches. Prefer several short scripts over one mega-script.
 6. **If the model does not have the field, say so.** Do not guess a column. Offer a documented column that is actually in the model, or stop. A `sys.columns` probe is only for a column the user says exists and the model does not list.
-7. **SQL Server and Azure SQL only.** These scripts target SQL Server or Azure SQL, the same engines `discover-data-model` catalogs. If the user says the target is not SQL Server or Azure SQL, stop.
+7. **SQL Server and Azure SQL only.** These scripts target SQL Server or Azure SQL, the same engines the catalog scripts describe. If the user says the target is not SQL Server or Azure SQL, stop.
 
 ## Which data model
 
 1. If the user names a file, or attaches one, that file is the model.
-2. If they do not, run `paths` on `../sql-from-data-model/scripts/sql_login.py`. Use `model_path` when `model_path_saved` is `yes` and that file exists.
-3. If `model_path` is not saved, or the file is missing, ask which data-model file to use. Do not guess a path.
+2. If they do not, run `paths` on `scripts/sql_login.py`. Use `model_path` when `model_path_saved` is `yes` and that file exists.
+3. If `model_path` is not saved, or the file is missing, ask which data-model file to use, or whether to build one by hand with `catalog/build.md`. Do not guess a path.
 
 Try `python3`, then `py -3`, then `python`.
 

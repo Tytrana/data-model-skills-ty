@@ -1,14 +1,19 @@
-# Data model skills
+# SQL from a data model
 
-Skills for SQL Server and Azure SQL. One learns the shape of a database. `/sql-from-data-model` is the chooser for a question. `/sql-from-data-model-manual` is the manual path on its own.
+One agent skill, `/sql-from-data-model`, that answers plain-English questions about a SQL Server or Azure SQL database with read-only queries. It has two options:
 
-dbvr uses the `microsoft` driver and a SQL username and password. These skills do not use Azure AD. They do not support other database engines.
+- **Option A: Automatic.** The skill writes the query, runs it through dbvr, and shows the answer in the chat.
+- **Option B: Manual.** The skill writes the query. You run it in DBeaver and paste the result back.
+
+This skill replaces the earlier `/sql-from-data-model-manual` and `/discover-data-model` skills. The manual skill is now Option B. The discover steps are now part of the skill: Option A runs them for you, and Option B walks you through them when you don't have a data model yet.
+
+dbvr uses the `microsoft` driver and a SQL username and password. The skill does not use Azure AD. It does not support other database engines.
 
 This repo does not include a data model. The default location is the `model_path` from `paths`, inside the settings folder, which is outside this repo. You can choose another path. Keep the data model outside this repo and do not commit it. Do not commit passwords or connection strings. Passwords are typed in the sign-in windows and stored only in the private `.env` file.
 
-## How they work together
+## How it works
 
-Every question needs a data model: a map of the database's tables, columns, and keys. Option A builds it during first-time setup. `/discover-data-model` builds it by hand, one catalog script at a time. Option B uses a model you already have.
+Every question needs a data model: a map of the database's tables, columns, and keys. Option A builds it during first-time setup. Option B uses a model you already have, or walks you through building one, one catalog script at a time.
 
 ```mermaid
 flowchart TD
@@ -23,8 +28,10 @@ flowchart TD
   run --> verify["Check before sending<br/>Table pasted exactly as returned<br/>Row count from the script, not the agent<br/>Answer uses only values in the table<br/>Column meanings only from the data model or notes"]
   verify --> answer["Answer in the chat:<br/>the exact table, the row count, and the query"]
 
-  menu -->|"B: Manual"| model[("Data model file")]
-  discover["/discover-data-model<br/>7 catalog scripts you run yourself"] --> model
+  menu -->|"B: Manual"| has{"Have a data model?"}
+  has -->|No| discover["Build it by hand<br/>7 catalog scripts you run yourself"]
+  discover --> model[("Data model file")]
+  has -->|Yes| model
   model --> writeb["The skill writes a SELECT"]
   writeb --> dbeaver["You run it in DBeaver<br/>and paste the result back"]
 ```
@@ -38,7 +45,7 @@ If dbvr is not available, Option A can build the data model from your code repos
 - Network or VPN access to the database ports.
 - Your IP allowed in the Azure SQL firewall, when the server is Azure SQL.
 
-Option B needs a data model file and DBeaver. It does not need dbvr.
+Option B needs DBeaver. It does not need dbvr.
 
 ## Install
 
@@ -48,27 +55,35 @@ Clone this repo, or use **Code → Download ZIP** on GitHub and unzip it.
 git clone https://github.com/Tytrana/data-model-skills-ty.git
 ```
 
-**Cursor.** Copy these three folders into the user skills folder:
+**Cursor.** Copy the `.cursor/skills/sql-from-data-model` folder into the user skills folder:
 
 - Mac and Linux: `~/.cursor/skills/`
 - Windows: `%USERPROFILE%\.cursor\skills\`
 
-**Claude Code.** Copy the same three folders into:
+**Claude Code.** Copy the same folder into:
 
 - Mac and Linux: `~/.claude/skills/`
 - Windows: `%USERPROFILE%\.claude\skills\`
 
 **Codex, Copilot, and other agents.** Open this repo and follow `AGENTS.md`.
 
-The three folders are:
+If you installed the earlier `discover-data-model` or `sql-from-data-model-manual` skills, delete those folders. This skill replaces them.
 
-- `.cursor/skills/discover-data-model`
-- `.cursor/skills/sql-from-data-model`
-- `.cursor/skills/sql-from-data-model-manual`
+The folder holds everything the skill needs:
 
-The dbvr script is `.cursor/skills/sql-from-data-model/scripts/sql_login.py`. Copying that skill folder copies the script. `.cursor/skills/sql-from-data-model/scripts/databases.example.json` is a placeholder list with no passwords. Copy it, replace the placeholders, and pass that file to `init-databases`. Do not commit the copy if it contains real server names.
+| File | What it is |
+|---|---|
+| `SKILL.md` | The menu and Option A |
+| `manual.md` | Option B |
+| `catalog/queries.md` | The 7 read-only catalog scripts |
+| `catalog/build.md` | How the data model is built and written |
+| `notes.template.md` | A blank, optional column-notes file |
+| `scripts/sql_login.py` | The dbvr script |
+| `scripts/databases.example.json` | A placeholder database list |
 
-Opening this repo in Cursor also finds the skills under `.cursor/skills/`.
+The dbvr script is `.cursor/skills/sql-from-data-model/scripts/sql_login.py`. Copying the skill folder copies the script. `.cursor/skills/sql-from-data-model/scripts/databases.example.json` is a placeholder list with no passwords. Copy it, replace the placeholders, and pass that file to `init-databases`. Do not commit the copy if it contains real server names.
+
+Opening this repo in Cursor also finds the skill under `.cursor/skills/`.
 
 ## Where settings live
 
@@ -103,15 +118,13 @@ That folder holds:
 
 On Mac and Linux the script sets the folder to mode `0700` and `.env` to mode `0600`. On Windows it relies on the user profile being private. Windows does not get those Unix modes.
 
-## The chooser
+## Using the skill
 
 In chat, type `/sql-from-data-model`.
 
 The skill shows Option A, then Option B. Read both. Reply with A or B. It does not look anything up until you choose.
 
 If that same message already says Option A or Option B, it skips the menu and uses that option.
-
-You can also type `/sql-from-data-model-manual`. That starts the manual path directly.
 
 ### Option A
 
@@ -131,23 +144,23 @@ The repos are a secondary choice if dbvr is not available. You provide one repo 
 
 ### Answers
 
-An answer copies the script’s table exactly as printed, including the header, the separator, and every row, then states `<n> rows returned.` from the script’s `ROWS` line. The opening sentence quotes only names, numbers, dates, IDs, and statuses that appear in that table. A column is explained only when the data model or the user's notes file documents it. The notes file is optional. Its path is `notes_path` in `setup.json`. The blank template is `.cursor/skills/sql-from-data-model-manual/notes.template.md`.
+An answer copies the script’s table exactly as printed, including the header, the separator, and every row, then states `<n> rows returned.` from the script’s `ROWS` line. The opening sentence quotes only names, numbers, dates, IDs, and statuses that appear in that table. A column is explained only when the data model or the user's notes file documents it. Before sending, the agent compares every value in its answer against the script output and fixes anything that does not match. The notes file is optional. Its path is `notes_path` in `setup.json`. The blank template is `.cursor/skills/sql-from-data-model/notes.template.md`.
 
 ### Option B — manual
 
-The manual skill is `sql-from-data-model-manual`. Open it with `/sql-from-data-model-manual`, or pick Option B from the chooser.
+Pick Option B from the menu. This was the earlier `/sql-from-data-model-manual` skill.
 
 The skill reads a saved map of tables and columns, writes the question, and you run that question yourself in DBeaver.
 
-You need the data model file, and DBeaver already open on the database. The skill writes the SQL. You paste it into DBeaver, run it, and paste the result back.
+You need DBeaver already open on the database. The skill writes the SQL. You paste it into DBeaver, run it, and paste the result back.
 
-The model file is `model_path` in `setup.json` when that file exists. Otherwise the skill asks which file to use.
+The model file is `model_path` in `setup.json` when that file exists. Otherwise the skill asks which file to use, or offers to build one by hand.
 
 The query uses only tables and columns in that file. Each script is for one database. Column notes come from the data model or from `notes_path`. If `notes_path` is empty, a column that the data model does not explain is reported as `Meaning not documented.`
 
-## Discover the database
+### Building the data model by hand
 
-In chat, type `/discover-data-model`.
+This was the earlier `/discover-data-model` skill. Option B uses it when you don't have a data model yet.
 
 The skill gives you one SQL script. Run it in your database tool and paste the result back. It then gives you the next script. There are 7 scripts. They only read the list of tables, columns, and keys. They do not change data.
 
@@ -155,7 +168,7 @@ After the last result, the skill writes a markdown file. That file is the data m
 
 Do one database at a time. If you have two databases, finish the first before starting the second.
 
-Option A, when it uses dbvr, runs those same catalog scripts. It does not change them, and it does not replace `/discover-data-model`.
+Option A, when it uses dbvr, runs those same 7 scripts itself. It does not change them.
 
 ## What has been verified
 
@@ -180,16 +193,19 @@ Also verified on Mac through `.cursor/skills/sql-from-data-model/scripts/sql_log
 
 `run` sends the SQL file with `-in=<file>` and `-l=100000`. The read-only proof is still one trailing `SELECT`. After the table, `run` prints `ROWS <n>`.
 
+Building the data model through dbvr was verified on 2026-10-19: all seven catalog scripts ran unchanged through `run`, with `--csv`, on four Azure SQL databases.
+
 ## Known limits
 
 `DECLARE` does not work. dbvr runs each statement separately, so a variable declared in one statement is missing in the next (SQL Error 137, verified 2026-10-16). Put the value directly in the query. The script refuses `DECLARE`.
+
+Check constraint definitions and index filter definitions can come back empty when the login cannot view object definitions. The data model then lists them as `definition null` and `filter definition not returned`.
 
 ## What has not been verified
 
 - Whether `SET NOCOUNT ON` and `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED` carry over to the next statement. They are harmless either way. The catalog scripts stay unchanged.
 - dbvr’s output encoding on Windows. The script tries UTF-8 first, then the Windows code page.
 - The PowerShell sign-in window.
-- Building the data model through dbvr.
 - These Windows install paths, which are guesses: `%ProgramFiles%\dbvr\dbvr.exe` and `%LOCALAPPDATA%\Programs\dbvr\dbvr.exe`. Windows needs one real test of setup and one query.
 - The Linux sign-in window.
 - The new field list: one username and one password per database. The Mac window mechanism was verified with a shorter field list.

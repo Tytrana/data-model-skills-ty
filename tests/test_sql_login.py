@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / ".cursor/skills/sql-from-data-model/scripts/sql_login.py"
-QUERIES = ROOT / ".cursor/skills/discover-data-model/queries.md"
+QUERIES = ROOT / ".cursor/skills/sql-from-data-model/catalog/queries.md"
 EXAMPLE = ROOT / ".cursor/skills/sql-from-data-model/scripts/databases.example.json"
 
 spec = importlib.util.spec_from_file_location("sql_login", SCRIPT)

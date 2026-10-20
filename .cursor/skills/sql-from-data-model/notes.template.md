@@ -2,7 +2,7 @@
 
 This file is a blank template. It is not a data model, and it does not describe a real database.
 
-The skills do not need a notes file. `notes_path` in `setup.json` starts empty, and setup can finish while it is empty.
+The skill does not need a notes file. `notes_path` in `setup.json` starts empty, and setup can finish while it is empty.
 
 To use notes:
 

@@ -1,33 +1,32 @@
 ---
 name: sql-from-data-model
 description: >-
-  Entry point for /sql-from-data-model. On invoke, shows Option A and
-  Option B and waits before any lookup. Option A uses dbvr 26.2 or newer as
-  the primary source, with the repos as a secondary source, then writes a
-  read-only query or runs it. Option B follows sql-from-data-model-manual,
-  which writes SQL for the user to paste into DBeaver. Use when the user
-  invokes /sql-from-data-model.
+  Answers plain-English questions about a SQL Server or Azure SQL database
+  with read-only queries written from a data model. On invoke, shows Option A
+  and Option B and waits before any lookup. Option A uses dbvr 26.2 or newer
+  as the primary source, with the repos as a secondary source, builds the
+  data model, then writes a read-only query and runs it. Option B writes SQL
+  for the user to paste into DBeaver, and can build the data model by hand
+  first. Use when the user invokes /sql-from-data-model.
 disable-model-invocation: true
 ---
 
 # SQL from Data Model
 
-`/sql-from-data-model` is the chooser. It shows the menu, then runs Option A or hands Option B to the manual skill.
+`/sql-from-data-model` is the only entry point. It shows the menu, then runs Option A or Option B.
 
-`/sql-from-data-model-manual` is also an entry point. It runs that same manual workflow on its own.
+This skill supports SQL Server and Azure SQL only.
 
-These skills support SQL Server and Azure SQL only.
-
-Do not edit `discover-data-model`. Do not rewrite its catalog queries.
+Do not rewrite the catalog scripts in `catalog/queries.md`.
 
 Paths are relative to this skill folder. Do not invent a home-directory path.
 
 - Script: `scripts/sql_login.py`
 - Example database list (placeholders only): `scripts/databases.example.json`
-- Option B: `../sql-from-data-model-manual/SKILL.md`
-- Blank notes template: `../sql-from-data-model-manual/notes.template.md`
-- Catalog SQL: `../discover-data-model/queries.md`
-- Catalog gates and template: `../discover-data-model/SKILL.md`
+- Option B: `manual.md`
+- Blank notes template: `notes.template.md`
+- Catalog SQL: `catalog/queries.md`
+- Catalog gates and template, and the by-hand build: `catalog/build.md`
 
 Settings, the `.env` file, and the data model path come from `paths`. Do not guess Mac, Windows, or Linux folders. The data model stays outside this repo. The default is the `model_path` from `paths`.
 
@@ -80,7 +79,7 @@ If this same message says Option A or Option B, skip the menu and use that optio
 
 Otherwise, on invoke, before any lookup, send the menu below as the whole reply, then stop.
 
-Do not read a data model, the notes file, `../discover-data-model/queries.md`, or a repo. Do not run `scripts/sql_login.py`. Do not open `setup.json` or the `.env` file. Do not write SQL.
+Do not read a data model, the notes file, `catalog/queries.md`, or a repo. Do not run `scripts/sql_login.py`. Do not open `setup.json` or the `.env` file. Do not write SQL.
 
 After the menu, accept `A`, `B`, `Option A`, or `Option B`. Then continue. If the reply names both, ask for one and stop.
 
@@ -94,15 +93,15 @@ You ask a question in plain English. The skill writes the database query, runs i
 
 **B: Manual**
 The skill writes the database query. You copy it into DBeaver, run it yourself, and paste the result back.
-*You need:* DBeaver, connected to the database, and a data model file.
+*You need:* DBeaver, connected to the database. If you don't have a data model file yet, the skill helps you build one first.
 
 Reply **A** or **B**.
 
 ## Option B — manual
 
-Read and follow `../sql-from-data-model-manual/SKILL.md` in full. Column notes, when the user has them, come from `notes_path` in `setup.json`. The blank template is `../sql-from-data-model-manual/notes.template.md`. Do not treat the template as the user's notes. Option A reads the notes file only to explain a column or a value. Option A does not use it to pick a table or write the query. If the notes and the data model disagree, the data model wins. If `notes_path` is empty or the file is missing, write `Meaning not documented.` unless the data model documents the column.
+Read and follow `manual.md` in full. Column notes, when the user has them, come from `notes_path` in `setup.json`. The blank template is `notes.template.md`. Do not treat the template as the user's notes. Option A reads the notes file only to explain a column or a value. Option A does not use it to pick a table or write the query. If the notes and the data model disagree, the data model wins. If `notes_path` is empty or the file is missing, write `Meaning not documented.` unless the data model documents the column.
 
-If they picked B and have not said what to find, ask what they want to find and stop. If they already said what to find, follow the manual skill now. Do not run Option A.
+If they picked B and have not said what to find, ask what they want to find and stop. If they already said what to find, follow `manual.md` now. Do not run Option A.
 
 ## Option A — start
 
@@ -232,9 +231,9 @@ Use it only if they say to use it. Rebuild if they say to rebuild, or if the fil
 
 On dbvr, build every database in `databases.json`. Go one database at a time and finish all seven steps before the next one. Show progress, such as “Dev App: step 3 of 7”.
 
-For each step, copy that step’s SQL from `../discover-data-model/queries.md` exactly into a temp file. The steps are the seven headings in that file, from Step 1 through Step 7. Run `run <database> <file>`, then delete the file. Do not rewrite the SQL. Do not edit `../discover-data-model/queries.md`.
+For each step, copy that step’s SQL from `catalog/queries.md` exactly into a temp file. The steps are the seven headings in that file, from Step 1 through Step 7. Run `run <database> <file>`, then delete the file. Do not rewrite the SQL. Do not edit `catalog/queries.md`.
 
-Follow `## Gates`, `## After each passing result`, and `## Write the data model` in `../discover-data-model/SKILL.md`. Use that template. Replace only that database’s section. Every table, column, type, key, and count in the section must appear in a result from this run. Do not invent one. Do not hand the catalog SQL to the user. Do not ask them to paste a grid back.
+Follow `## Gates`, `## After each passing result`, and `## Write the data model` in `catalog/build.md`. Use that template. Replace only that database’s section. Every table, column, type, key, and count in the section must appear in a result from this run. Do not invent one. Do not hand the catalog SQL to the user. Do not ask them to paste a grid back.
 
 On the repo source, build the sections from migrations and entity models instead. Row counts are `unknown (repos do not contain rows)`. Each repo updates the data-model sections for databases with that label. `database_name` comes from the Identity block already in that section. If the section does not exist, ask for the `database_name`. Do not invent one.
 
@@ -246,7 +245,7 @@ Send this and stop:
 
 > ✅ **Setup is done.** From now on, just ask a question in plain English. For example: *How many orders does customer C-1001 have?* If they already asked a question in this same conversation, answer it with **Answer a question** instead of stopping.
 
-Do not ask for a notes file during setup. `notes_path` stays `""` unless the user already gave one. The blank template is `../sql-from-data-model-manual/notes.template.md`. Setup is finished without it.
+Do not ask for a notes file during setup. `notes_path` stays `""` unless the user already gave one. The blank template is `notes.template.md`. Setup is finished without it.
 
 ### From the repos (secondary)
 
@@ -314,13 +313,17 @@ Driver `microsoft`. SQL username and password, not Azure AD. No SSL or trust-cer
 Option A is strictly read-only. Allowed SQL is `SELECT` and `WITH` only. Every statement must start with `SELECT` or `WITH`. The only `SET` lines allowed are `SET NOCOUNT ON/OFF` and `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED`, which the catalog scripts use. Put values directly in the query, for example `WHERE CustomerId = N'C-1001'`. Do not use `DECLARE` or `@variables`. dbvr runs each statement separately, so a declared variable is lost (SQL Error 137, verified 2026-10-16). The script stops on `DECLARE` with that reason. It also blocks `INTO`, so `SELECT … INTO` is refused. The catalog scripts’ `SET` lines are allowed because those scripts are copied unchanged. `@@` functions such as `@@SERVERNAME` are allowed.
 
 - Repos: read migrations and entity models. Do not push, commit, or modify those repos. Do not run the query. Write the same literal-value queries as the dbvr source.
-- Database: catalog scripts from `../discover-data-model/queries.md` go through `run` unchanged. A question the skill writes is `SELECT` and `WITH` only. `run` stops unless the login’s database roles are reader 1, writer 0, owner 0.
+- Database: catalog scripts from `catalog/queries.md` go through `run` unchanged. A question the skill writes is `SELECT` and `WITH` only. `run` stops unless the login’s database roles are reader 1, writer 0, owner 0.
 - One database per script. No cross-database joins.
 - Do not invent tables or columns.
 
 ## Known limits
 
 `DECLARE` does not work. dbvr runs each statement separately, so a variable declared in one statement is missing in the next (SQL Error 137, verified 2026-10-16). Put the value directly in the query. The script refuses `DECLARE`.
+
+Check constraint definitions and index filter definitions can come back empty when the login cannot view object definitions. Write them as `definition null` and `filter definition not returned`. Do not guess them.
+
+Building the data model through dbvr was verified on 2026-10-19: all seven catalog scripts ran unchanged through `run`, with `--csv`, on four Azure SQL databases.
 
 ## Not verified
 
@@ -329,7 +332,6 @@ Say this when you use these parts.
 - Whether `SET NOCOUNT ON` and `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED` carry over to the next statement. They are harmless either way. Leave the catalog scripts unchanged.
 - dbvr’s output encoding on Windows. The script tries UTF-8 first, then the Windows code page.
 - The PowerShell sign-in window, and dbvr’s Windows install paths. Windows needs one real test of setup and one query.
-- Building the data model through dbvr.
 - The Linux sign-in window.
 - The new sign-in window has one username and one password per database. The Mac window mechanism was verified on 2026-10-15 with a shorter field list.
 - The role proof covers database roles only, not permissions granted directly to the login.

@@ -2,20 +2,23 @@
 
 This file is the procedure for Codex, Copilot, and any other agent. Cursor and Claude Code use the same procedure from `.cursor/skills/sql-from-data-model/SKILL.md`. If that skill file is available, follow it. The steps below are enough on their own.
 
-These skills support SQL Server and Azure SQL only. The dbvr driver is `microsoft`. Logins are SQL username and password, not Azure AD.
+This repo is one skill. It supports SQL Server and Azure SQL only. The dbvr driver is `microsoft`. Logins are SQL username and password, not Azure AD.
 
-Do not edit `.cursor/skills/discover-data-model`. Do not commit. Do not install dbvr. Do not push or modify a product repo.
+Do not rewrite the catalog scripts. Do not commit. Do not install dbvr. Do not push or modify a product repo.
 
 ## Files
 
+Everything is in `.cursor/skills/sql-from-data-model/`.
+
 | What | Where |
 |---|---|
-| Script | `.cursor/skills/sql-from-data-model/scripts/sql_login.py` |
-| Example database list | `.cursor/skills/sql-from-data-model/scripts/databases.example.json` |
-| Manual skill (Option B) | `.cursor/skills/sql-from-data-model-manual/SKILL.md` |
-| Blank notes template | `.cursor/skills/sql-from-data-model-manual/notes.template.md` |
-| Catalog SQL | `.cursor/skills/discover-data-model/queries.md` |
-| Catalog gates and template | `.cursor/skills/discover-data-model/SKILL.md` sections `## Gates`, `## After each passing result`, and `## Write the data model` |
+| Main procedure (menu and Option A) | `SKILL.md` |
+| Option B (manual) | `manual.md` |
+| Blank notes template | `notes.template.md` |
+| Catalog SQL | `catalog/queries.md` |
+| Catalog gates and template, and the by-hand build | `catalog/build.md`. Option A uses only the sections `## Gates`, `## After each passing result`, and `## Write the data model` |
+| Script | `scripts/sql_login.py` |
+| Example database list | `scripts/databases.example.json` |
 
 Settings live outside this repo. Run `paths` and use the paths it prints. Do not guess a home folder. Keep the data model outside this repo and do not commit it. The default is the `model_path` from `paths`.
 
@@ -61,7 +64,7 @@ The user may not be technical. Use the exact user-facing messages in `.cursor/sk
 If the user has not chosen, send the menu from `.cursor/skills/sql-from-data-model/SKILL.md` and wait. It offers:
 
 - **A: Automatic.** You ask in plain English; the skill writes the query, runs it, and shows the answer in the chat. Needs dbvr 26.2 or newer and access to the databases. The first time, a short setup signs you in. If dbvr isn't available, setup can read the code repos instead and write queries without running them.
-- **B: Manual.** Read `.cursor/skills/sql-from-data-model-manual/SKILL.md` and follow it. The user copies the query into DBeaver and pastes the result back.
+- **B: Manual.** Read `.cursor/skills/sql-from-data-model/manual.md` and follow it. The user copies the query into DBeaver and pastes the result back. With no data model yet, it first builds one by hand from `.cursor/skills/sql-from-data-model/catalog/build.md`.
 
 If the user already said Option A or Option B, skip the menu.
 
@@ -77,7 +80,7 @@ Run `paths`, then read `setup.json`. Continue only for what is missing.
 6. When `setup` runs, it proves each login is read-only (reader 1, writer 0, owner 0). Report each database as OK or with the script’s failure line. That proof covers database roles only, not permissions granted directly to the login. Every later `run` proves that database again.
 7. The script writes `.env` only if every database in that `setup` passed. Then set `source` to `dbvr` and `dbvr_path` in `setup.json`. Do that write even when sign-in was skipped. Keep `notes_path`. Leave it `""` when the user has no notes file.
 8. Ask where the model file should live. Default is the `model_path` from `paths` when `model_path_saved` is `no`. Save the chosen path as `model_path`. The file stays outside this repo. If the file exists, ask: “Use this model, or rebuild it from the databases?”
-9. Build every database in `databases.json`, one at a time. Finish all seven catalog steps before the next database. Copy each step’s SQL from `.cursor/skills/discover-data-model/queries.md` exactly into a temp file, run `run <database> <file>`, and delete the file. Follow the discover skill’s gates and template. Replace only that database’s section. Show progress, such as “Dev App: step 3 of 7”.
+9. Build every database in `databases.json`, one at a time. Finish all seven catalog steps before the next database. Copy each step’s SQL from `.cursor/skills/sql-from-data-model/catalog/queries.md` exactly into a temp file, run `run <database> <file>`, and delete the file. Follow the gates and template in `.cursor/skills/sql-from-data-model/catalog/build.md`. Replace only that database’s section. Show progress, such as “Dev App: step 3 of 7”.
 10. Say “Setup done, data model built. What do you want to find?” and stop. Do not ask for a notes file. `notes_path` is optional.
 
 Repos: ask for one repo link per database label, and read access. Labels shared by more than one environment use one link. Save those under `repo_links` with `read_access_confirmed` true and `source` set to `repos`. Read migrations and entity models only. Do not run a query. Row counts are `unknown (repos do not contain rows)`. Each repo updates the data-model sections for databases with that label. Do not push or edit those repos.
@@ -108,6 +111,10 @@ On the repo source, write the query and do not run it. Use the same literal valu
 
 `DECLARE` does not work. dbvr runs each statement separately, so a variable declared in one statement is missing in the next (SQL Error 137, verified 2026-10-16). Put the value directly in the query. The script refuses `DECLARE`.
 
+Check constraint definitions and index filter definitions can come back empty when the login cannot view object definitions. Write them as `definition null` and `filter definition not returned`. Do not guess them.
+
+Building the data model through dbvr was verified on 2026-10-19: all seven catalog scripts ran unchanged through `run`, with `--csv`, on four Azure SQL databases.
+
 ## Not verified
 
 Say this when you use these parts.
@@ -117,5 +124,4 @@ Say this when you use these parts.
 - The PowerShell sign-in window and the Windows dbvr install paths. Windows needs one real setup and one query.
 - The Linux sign-in window.
 - The Mac sign-in window with one username and one password per database.
-- Building the data model through dbvr.
 - The role proof covers database roles only.

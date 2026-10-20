@@ -1,21 +1,15 @@
----
-name: discover-data-model
-description: >-
-  Walks any SQL Server or Azure SQL database one read-only catalog query at a
-  time and writes a complete structural data model from the results the user
-  pastes back. Use when the user asks to discover a database, build or refresh
-  a data model from the live schema, catalog tables and columns, or run the
-  data-model discovery steps. Do not use it to look up rows in a database that
-  already has a data model — that is sql-from-data-model.
----
+# Build the data model by hand
 
-# Discover Data Model
+This file is part of `/sql-from-data-model`. It is used two ways:
+
+- **Option B, by hand.** The user has no data model yet. Follow this whole file.
+- **Option A, through dbvr.** `SKILL.md` runs the same scripts itself. It follows only `## Gates`, `## After each passing result`, and `## Write the data model` below.
 
 Build a structural data model of a SQL Server database by handing the user **one catalog query per turn**, waiting for the result, then continuing. The queries are general: they read `sys.*` only and work on any SQL Server or Azure SQL database. They do not name application tables.
 
-You do not run the SQL. The user runs it in DBeaver (or any SQL Server client) and pastes or attaches the grid.
+By hand, you do not run the SQL. The user runs it in DBeaver (or any SQL Server client) and pastes or attaches the grid.
 
-This skill **creates** the data model. Looking up rows in an existing model is `sql-from-data-model`, not this skill. Both skills are in this repo. The data model file is not. Save it only at a path the user names outside this repository. If they name a path inside this repo, ask for a path outside it.
+This file **creates** the data model. Looking up rows is the rest of the skill. The data model file is not in this repo. Save it only at a path the user names outside this repository. If they name a path inside this repo, ask for a path outside it.
 
 ## Non-negotiable
 
@@ -128,4 +122,6 @@ note: Structural catalog from read-only sys.* scripts. Row counts are catalog es
 
 If they named an output path, save that file and then give the path. If the path is an existing data model, replace this database's structural catalog with this run. Drop tables that are not in the new inventory for this database. Do not keep columns, keys, or counts that this run did not return. Leave any other database's section as it was until that database has its own finished pass.
 
-After the file is written, stop. If another database is still queued, start its Step 1 in the next message only. Do not start it in the same message as the write-up.
+By hand, after the file is written, stop. If another database is still queued, start its Step 1 in the next message only. Do not start it in the same message as the write-up. When every database is done, save the path as `model_path` in `setup.json` if the user agrees, and go back to `manual.md` for their question.
+
+Through dbvr, Option A goes straight on to the next database, as `SKILL.md` says.
