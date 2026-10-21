@@ -128,12 +128,13 @@ A login without `VIEW DEFINITION` still sees every table and column, but SQL Ser
 
 Building the data model through dbvr was verified on 2026-10-19: all seven catalog scripts ran unchanged through `run`, with `--csv`, on four Azure SQL databases.
 
+On Windows, dbvr's bundled Java writes the printed table in the Windows code page, so a character outside it, such as an emoji, came back as `?` (verified with dbvr 26.2.3). Setting `JAVA_TOOL_OPTIONS=-Dstdout.encoding=UTF-8` fixed it; `-Dfile.encoding=UTF-8` did not. The script sets that option for dbvr on Windows only, and keeps any `JAVA_TOOL_OPTIONS` already set. The CSV from `--csv` was always UTF-8.
+
 ## Not verified
 
 Say this when you use these parts.
 
 - Whether `SET NOCOUNT ON` and `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED` carry over to the next statement. They are harmless either way. Leave the catalog scripts unchanged.
-- dbvr’s output encoding on Windows. The script tries UTF-8 first, then the Windows code page.
 - The PowerShell sign-in window and the Windows dbvr install paths. Windows needs one real setup and one query.
 - The Linux sign-in window.
 - The Mac sign-in window with one username and one password per database.

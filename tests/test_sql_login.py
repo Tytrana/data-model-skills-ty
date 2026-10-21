@@ -4,8 +4,10 @@ import io
 import json
 import os
 import re
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -468,6 +470,54 @@ class OtherChecks(unittest.TestCase):
         self.assertEqual(finished["model_path"], "/tmp/data-model.md")
         self.assertEqual(finished["notes_path"], "")
         self.assertEqual(finished["repo_links"], {})
+
+
+class DbvrEnvTests(unittest.TestCase):
+    OPTION = "-Dstdout.encoding=UTF-8"
+
+    def test_windows_adds_the_option(self):
+        env = sql_login.dbvr_env("win32", {"PATH": "C:/bin"})
+        self.assertEqual(env["JAVA_TOOL_OPTIONS"], self.OPTION)
+        self.assertEqual(env["PATH"], "C:/bin")
+
+    def test_windows_keeps_an_existing_value(self):
+        env = sql_login.dbvr_env("win32", {"JAVA_TOOL_OPTIONS": "-Xmx512m"})
+        self.assertEqual(env["JAVA_TOOL_OPTIONS"], f"-Xmx512m {self.OPTION}")
+
+    def test_windows_does_not_add_it_twice(self):
+        for value in (self.OPTION, f"-Xmx512m {self.OPTION}"):
+            env = sql_login.dbvr_env("win32", {"JAVA_TOOL_OPTIONS": value})
+            self.assertEqual(env["JAVA_TOOL_OPTIONS"], value)
+            env = sql_login.dbvr_env("win32", env)
+            self.assertEqual(env["JAVA_TOOL_OPTIONS"].split().count(self.OPTION), 1)
+
+    def test_mac_and_linux_are_unchanged(self):
+        for platform in ("darwin", "linux"):
+            source = {"PATH": "/usr/bin", "JAVA_TOOL_OPTIONS": "-Xmx512m"}
+            self.assertEqual(sql_login.dbvr_env(platform, source), source)
+            self.assertNotIn("JAVA_TOOL_OPTIONS", sql_login.dbvr_env(platform, {"PATH": "/usr/bin"}))
+
+    def test_caller_environment_is_not_modified(self):
+        source = {"JAVA_TOOL_OPTIONS": "-Xmx512m"}
+        env = sql_login.dbvr_env("win32", source)
+        self.assertEqual(source, {"JAVA_TOOL_OPTIONS": "-Xmx512m"})
+        self.assertIsNot(env, source)
+        empty = {}
+        sql_login.dbvr_env("win32", empty)
+        self.assertEqual(empty, {})
+
+    def test_run_dbvr_passes_the_environment(self):
+        seen = {}
+
+        def fake_run(cmd, **kwargs):
+            seen.update(kwargs)
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"|a|\n|-|\n|1|\n", stderr=b"")
+
+        with mock.patch.object(sql_login.subprocess, "run", fake_run):
+            proc = sql_login.run_dbvr(["dbvr"], timeout=5)
+        self.assertEqual(seen["env"], sql_login.dbvr_env())
+        self.assertEqual(seen["timeout"], 5)
+        self.assertEqual(proc.stdout, "|a|\n|-|\n|1|\n")
 
 
 if __name__ == "__main__":

@@ -775,8 +775,28 @@ def dbvr_command(dbvr, workspace, host, port, database, user, password, query=No
     return cmd
 
 
+STDOUT_UTF8_OPTION = "-Dstdout.encoding=UTF-8"
+
+
+def dbvr_env(platform=None, environ=None):
+    """Return a copy of the environment for dbvr. Never changes the one passed in.
+
+    On Windows, dbvr's bundled Java writes stdout in the Windows code page, so an
+    emoji prints as "?". -Dstdout.encoding=UTF-8 fixed it (dbvr 26.2.3);
+    -Dfile.encoding=UTF-8 did not.
+    """
+    platform = platform or sys.platform
+    env = dict(os.environ if environ is None else environ)
+    if platform != "win32":
+        return env
+    current = env.get("JAVA_TOOL_OPTIONS", "")
+    if STDOUT_UTF8_OPTION not in current.split():
+        env["JAVA_TOOL_OPTIONS"] = f"{current} {STDOUT_UTF8_OPTION}" if current.strip() else STDOUT_UTF8_OPTION
+    return env
+
+
 def run_dbvr(cmd, timeout):
-    proc = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    proc = subprocess.run(cmd, capture_output=True, timeout=timeout, env=dbvr_env())
     proc.stdout = decode_output(proc.stdout)
     proc.stderr = decode_output(proc.stderr)
     return proc

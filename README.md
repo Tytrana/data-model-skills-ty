@@ -207,6 +207,8 @@ Also verified on Mac through `.cursor/skills/sql-from-data-model/scripts/sql_log
 
 Building the data model through dbvr was verified on 2026-10-19: all seven catalog scripts ran unchanged through `run`, with `--csv`, on four Azure SQL databases.
 
+On Windows, dbvr's bundled Java writes the printed table in the Windows code page, so a character outside it, such as an emoji, came back as `?` (verified with dbvr 26.2.3). Setting `JAVA_TOOL_OPTIONS=-Dstdout.encoding=UTF-8` fixed it; `-Dfile.encoding=UTF-8` did not. The script sets that option for dbvr on Windows only, and keeps any `JAVA_TOOL_OPTIONS` already set. The CSV from `--csv` was always UTF-8.
+
 ## Known limits
 
 `DECLARE` does not work. dbvr runs each statement separately, so a variable declared in one statement is missing in the next (SQL Error 137, verified 2026-10-16). Put the value directly in the query. If a value contains an apostrophe, write it twice, for example `N'O''Brien'`. The script refuses `DECLARE`.
@@ -216,7 +218,6 @@ A login without `VIEW DEFINITION` still sees every table and column, but SQL Ser
 ## What has not been verified
 
 - Whether `SET NOCOUNT ON` and `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED` carry over to the next statement. They are harmless either way. The catalog scripts stay unchanged.
-- dbvr’s output encoding on Windows. The script tries UTF-8 first, then the Windows code page.
 - The PowerShell sign-in window.
 - These Windows install paths, which are guesses: `%ProgramFiles%\dbvr\dbvr.exe` and `%LOCALAPPDATA%\Programs\dbvr\dbvr.exe`. Windows needs one real test of setup and one query.
 - The Linux sign-in window.
