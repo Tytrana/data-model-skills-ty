@@ -25,9 +25,13 @@ DOTTED_VERSION_RE = re.compile(r"(\d+)\.(\d+)(?:\.(\d+))?")
 BARE_VERSION_RE = re.compile(r"\b(\d+)\b")
 FORBIDDEN = re.compile(
     r"\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|ALTER|DROP|CREATE|EXEC|EXECUTE|GRANT|REVOKE|DENY|INTO|DECLARE"
-    r"|OPENROWSET|OPENQUERY|OPENDATASOURCE|USE|WAITFOR|DBCC|BACKUP|RESTORE|BULK|KILL|SHUTDOWN)\b",
+    r"|OPENROWSET|OPENQUERY|OPENDATASOURCE|USE|WAITFOR|DBCC|BACKUP|RESTORE|BULK|KILL|SHUTDOWN"
+    r"|NEXT\s+VALUE\s+FOR)\b",
     re.IGNORECASE,
 )
+# A bracketed or double-quoted name becomes this marker, so a lone name still has a first word.
+# SQL Server runs a lone name at the start of a batch as a stored procedure call.
+NAME_MARKER = " [name] "
 ALLOWED_SET = {
     "set nocount on",
     "set nocount off",
@@ -40,11 +44,13 @@ CONTINUATIONS = {
 }
 PIPE_SEPARATOR_RE = re.compile(r"^\|[-|\s]+\|$")
 PIPE_VALUE_NOTE = 'NOTE a value contains "|", so this table may display wrong'
+APOSTROPHE_HINT = "If a value contains an apostrophe, write it twice, for example N'O''Brien'."
 DECLARE_MESSAGE = (
     "the query uses DECLARE. dbvr runs each statement separately, "
-    "so variables are lost. Put the value directly in the query instead."
+    "so variables are lost. Put the value directly in the query instead. "
+    + APOSTROPHE_HINT
 )
-UNCLOSED_MESSAGE = "the query has an unclosed quote, bracket, or comment."
+UNCLOSED_MESSAGE = "the query has an unclosed quote, bracket, or comment. " + APOSTROPHE_HINT
 ROLE_QUERY = (
     "SELECT DB_NAME() AS database_name, "
     "IS_ROLEMEMBER('db_datareader') AS reader_role, "
@@ -288,6 +294,11 @@ def model_path(setup, paths):
     if named:
         return Path(named)
     return paths["settings_dir"] / "data-model.md"
+
+
+def queries_path(setup, paths):
+    model = model_path(setup, paths)
+    return model.with_name(f"{model.stem}.saved-queries.md")
 
 
 def parse_version(text):
@@ -582,14 +593,14 @@ def prepare_sql(sql):
             end = _scan_bracket(text, index)
             if end is None:
                 return None
-            out.append(" ")
+            out.append(NAME_MARKER)
             index = end
             continue
         if text[index] == '"':
             end = _scan_quoted(text, index, '"')
             if end is None:
                 return None
-            out.append(" ")
+            out.append(NAME_MARKER)
             index = end
             continue
         if text.startswith("--", index):
@@ -661,7 +672,7 @@ def forbidden_keyword(sql):
     if prepared is None:
         return None
     match = FORBIDDEN.search(prepared)
-    return match.group(1).upper() if match else None
+    return " ".join(match.group(1).upper().split()) if match else None
 
 
 def refuse_reason(sql):
@@ -820,7 +831,10 @@ def pipe_value_note(output):
 
 
 def role_result(output, database_name):
-    """Return 'read-only', 'writable', or 'missing' from a pipe table. No database call."""
+    """Return 'read-only', 'can change data', or 'missing' from a pipe table. No database call.
+
+    Only reports. Any login that signs in is accepted; the SQL filter keeps queries read-only.
+    """
     rows = [
         line for line in (output or "").splitlines()
         if line.startswith("|") and database_name in line
@@ -830,12 +844,12 @@ def role_result(output, database_name):
     cells = [cell.strip() for cell in rows[0].strip().strip("|").split("|")]
     if len(cells) < 4:
         return "missing"
-    if (cells[1], cells[2], cells[3]) == ("1", "0", "0"):
-        return "read-only"
-    return "writable"
+    if "1" in (cells[2], cells[3]):
+        return "can change data"
+    return "read-only"
 
 
-def prove_read_only(dbvr, workspace, db, user, password):
+def check_login_roles(dbvr, workspace, db, user, password):
     redact = make_redact([user, password])
     cmd = dbvr_command(
         dbvr, workspace, db["server"], db["port"], db["database"], user, password, ROLE_QUERY,
@@ -850,11 +864,9 @@ def prove_read_only(dbvr, workspace, db, user, password):
     if proc.returncode != 0:
         return False, map_dbvr_error(blob, db["label"], db["env"])
     result = role_result(out, db["database"])
-    if result == "read-only":
-        return True, "read-only"
-    if result == "writable":
-        return False, "This login can write. Use a read-only login."
-    return False, map_dbvr_error(blob, db["label"], db["env"])
+    if result == "missing":
+        return False, map_dbvr_error(blob, db["label"], db["env"])
+    return True, result
 
 
 def print_paths(paths=None):
@@ -870,6 +882,7 @@ def print_paths(paths=None):
     print(f"env_file={paths['env_file']}")
     print(f"model_path={saved or model_path(setup, paths)}")
     print(f"model_path_saved={'yes' if saved else 'no'}")
+    print(f"queries_path={queries_path(setup, paths)}")
     print(f"dbvr_workspace={paths['dbvr_workspace']}")
     print(f"platform={sys.platform}")
 
@@ -1135,7 +1148,7 @@ def setup(setup_doc, override, paths, only_env=None):
     failures = []
     for db in scope_rows:
         username, password = collected[db["key"]]
-        ok, detail = prove_read_only(dbvr, workspace, db, username, password)
+        ok, detail = check_login_roles(dbvr, workspace, db, username, password)
         print(f"{'OK' if ok else 'FAILED'} {db['database']}: {detail}", flush=True)
         if not ok:
             failures.append(db["database"])
@@ -1173,9 +1186,6 @@ def run_query(database_name, sql_file, csv_path, setup_doc, override, paths):
         stop("the saved login is missing a value. Run setup again.")
     workspace = paths["dbvr_workspace"]
     workspace.mkdir(parents=True, exist_ok=True)
-    ok, detail = prove_read_only(dbvr, workspace, match, user, password)
-    if not ok:
-        stop(f"{match['database']}: {detail}")
     redact = make_redact([user, password])
     cmd = dbvr_command(
         dbvr, workspace, match["server"], match["port"], match["database"],

@@ -23,6 +23,63 @@ def catalog_scripts():
     return re.findall(r"```sql\n(.*?)```", text, re.S)
 
 
+def catalog_step(number):
+    text = QUERIES.read_text(encoding="utf-8")
+    match = re.search(rf"^## Step {number}\b.*?```sql\n(.*?)```", text, re.S | re.M)
+    return match.group(1)
+
+
+class CatalogQueriesTextTests(unittest.TestCase):
+    def test_step3_never_drops_a_column(self):
+        step3 = catalog_step(3)
+        self.assertNotRegex(step3, r"(?i)INNER\s+JOIN\s+sys\.types")
+        self.assertIn("LEFT JOIN sys.types AS ty ON ty.user_type_id = c.user_type_id", step3)
+        self.assertIn("LEFT JOIN sys.types AS bt ON bt.user_type_id = c.system_type_id", step3)
+
+    def test_step3_type_display_uses_the_base_type(self):
+        step3 = catalog_step(3)
+        self.assertNotIn("THEN ty.name", step3)
+        self.assertIn("COALESCE(ty.name, bt.name, N'unknown') AS type_name", step3)
+
+    def test_step3_returns_has_default(self):
+        self.assertIn(
+            "CASE WHEN dc.object_id IS NULL THEN 0 ELSE 1 END AS has_default",
+            catalog_step(3),
+        )
+
+    def test_step2_returns_column_count(self):
+        self.assertIn(
+            "(SELECT COUNT(*) FROM sys.columns AS c WHERE c.object_id = t.object_id) AS column_count",
+            catalog_step(2),
+        )
+
+    def test_step1_returns_can_view_definitions(self):
+        self.assertIn(
+            "HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'VIEW DEFINITION') AS can_view_definitions",
+            catalog_step(1),
+        )
+
+
+OLD_EMPTY_DEFINITION_WORDING = (
+    "definition null",
+    "cannot tell a hidden default from no default",
+)
+
+
+def doc_files():
+    return [ROOT / "AGENTS.md", ROOT / "README.md", *sorted((ROOT / ".cursor/skills").rglob("*.md"))]
+
+
+class DocsWordingTests(unittest.TestCase):
+    def test_no_doc_has_the_old_empty_definition_wording(self):
+        files = doc_files()
+        self.assertGreater(len(files), 3)
+        for path in files:
+            text = path.read_text(encoding="utf-8").lower()
+            for phrase in OLD_EMPTY_DEFINITION_WORDING:
+                self.assertNotIn(phrase, text, f"{path.relative_to(ROOT)}: {phrase}")
+
+
 class GuardTests(unittest.TestCase):
     def test_catalog_scripts_pass(self):
         blocks = catalog_scripts()
@@ -108,6 +165,112 @@ WHERE c.CustomerId = N'C-1001'
         ]
         for sql in blocked:
             self.assertIsNotNone(sql_login.refuse_reason(sql), sql)
+
+    def test_lone_name_stops(self):
+        cases = {
+            "[usp_Purge]": 1,
+            '"usp_Purge"': 1,
+            "SELECT 1;\n[usp_Purge]": 2,
+            'SELECT 1;\n"usp_Purge"': 2,
+            "[dbo].[usp_Purge]": 1,
+        }
+        for sql, index in cases.items():
+            reason = sql_login.refuse_reason(sql)
+            self.assertIsNotNone(reason, sql)
+            self.assertIn(f"statement {index} starts with", reason, sql)
+
+    def test_bracketed_names_in_a_select_pass(self):
+        sql = "SELECT [a] FROM [dbo].[T] WHERE [b] = N'O''Brien';"
+        self.assertIsNone(sql_login.refuse_reason(sql))
+        self.assertIsNone(sql_login.refuse_reason('SELECT "a" FROM "dbo"."T";'))
+
+    def test_next_value_for_stops(self):
+        for sql in (
+            "SELECT NEXT VALUE FOR dbo.Seq;",
+            "select next value for [dbo].[Seq];",
+            "SELECT NEXT\n  VALUE /* x */ FOR dbo.Seq;",
+        ):
+            self.assertEqual(
+                sql_login.refuse_reason(sql),
+                "the query contains NEXT VALUE FOR. Only SELECT and WITH are allowed.",
+                sql,
+            )
+
+    def test_next_value_for_inside_a_string_passes(self):
+        self.assertIsNone(sql_login.refuse_reason("SELECT 'NEXT VALUE FOR dbo.Seq' AS words;"))
+        self.assertIsNone(sql_login.refuse_reason("SELECT 1 AS [NEXT VALUE FOR];"))
+
+    def test_doubled_apostrophe_passes(self):
+        self.assertIsNone(sql_login.refuse_reason("SELECT 1 WHERE Name = N'O''Brien';"))
+
+    def test_single_apostrophe_stops_with_the_hint(self):
+        reason = sql_login.refuse_reason("SELECT 1 WHERE Name = N'O'Brien';")
+        self.assertEqual(reason, sql_login.UNCLOSED_MESSAGE)
+        self.assertIn("write it twice, for example N'O''Brien'", reason)
+
+    def test_declare_message_has_the_hint(self):
+        self.assertIn("N'O''Brien'", sql_login.DECLARE_MESSAGE)
+
+
+class RoleResultTests(unittest.TestCase):
+    DB = "app_db"
+
+    def table(self, reader, writer, owner):
+        return (
+            "|database_name|reader_role|writer_role|owner_role|\n"
+            "|-------------|-----------|-----------|----------|\n"
+            f"|{self.DB}|{reader}|{writer}|{owner}|\n"
+        )
+
+    def test_reader_only_is_read_only(self):
+        self.assertEqual(sql_login.role_result(self.table(1, 0, 0), self.DB), "read-only")
+
+    def test_reader_zero_is_read_only(self):
+        self.assertEqual(sql_login.role_result(self.table(0, 0, 0), self.DB), "read-only")
+
+    def test_writer_can_change_data(self):
+        self.assertEqual(sql_login.role_result(self.table(1, 1, 0), self.DB), "can change data")
+
+    def test_owner_can_change_data(self):
+        self.assertEqual(sql_login.role_result(self.table(0, 0, 1), self.DB), "can change data")
+
+    def test_missing_row(self):
+        self.assertEqual(sql_login.role_result("", self.DB), "missing")
+        self.assertEqual(sql_login.role_result(self.table(1, 0, 0), "other_db"), "missing")
+        self.assertEqual(sql_login.role_result(f"|{self.DB}|1|\n", self.DB), "missing")
+
+
+class QueriesPathTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.paths = sql_login.config_paths(self.root / "settings")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_next_to_a_named_model(self):
+        setup = {"model_path": str(self.root / "models" / "app-data-model.md")}
+        self.assertEqual(
+            sql_login.queries_path(setup, self.paths),
+            self.root / "models" / "app-data-model.saved-queries.md",
+        )
+
+    def test_next_to_the_default_model(self):
+        self.assertEqual(
+            sql_login.queries_path(sql_login.empty_setup(), self.paths),
+            self.root / "settings" / "data-model.saved-queries.md",
+        )
+
+    def test_paths_prints_it(self):
+        model = self.root / "models" / "my-model.md"
+        sql_login.save_setup({"model_path": str(model)}, self.paths)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            sql_login.print_paths(self.paths)
+        lines = out.getvalue().splitlines()
+        self.assertIn(f"model_path={model}", lines)
+        self.assertIn(f"queries_path={model.with_name('my-model.saved-queries.md')}", lines)
 
 
 class CountTableRowsTests(unittest.TestCase):

@@ -2,11 +2,11 @@
 
 An agentic, read-only database assistant for SQL Server and Azure SQL. You ask a question in plain English, such as *How many orders does customer C-1001 have?*, and the agent does the database work from start to finish:
 
-1. **Sets itself up.** It checks that dbvr is installed and every database can be reached. It opens a sign-in window for your username and password, never the chat. Then it proves the login can only read data.
+1. **Sets itself up.** It checks that dbvr is installed and every database can be reached. It opens a sign-in window for your username and password, never the chat. Then it tells you whether the login can change data.
 2. **Learns the database.** It runs 7 read-only catalog scripts and writes a data model: a map of every table, column, and key.
 3. **Answers.** It picks the right database and tables from the data model, writes the query, runs it, and checks its answer against the result before replying.
 
-It never changes data. The script refuses anything but `SELECT` and `WITH`, and every run first proves the login can't write. The agent doesn't guess either: it uses only tables and columns in the data model, and only values that came back from the database.
+It never changes data. The query filter keeps it read-only whichever login you use; a read-only login is still the safest choice. The script refuses anything but `SELECT` and `WITH`. The agent doesn't guess either: it uses only tables and columns in the data model, and only values that came back from the database.
 
 It is one skill, `/sql-from-data-model`, with two options:
 
@@ -28,10 +28,10 @@ flowchart TD
   start["/sql-from-data-model"] --> menu{"Option A or B?"}
 
   menu -->|"A: Automatic"| done{"Setup done?"}
-  done -->|No| setup["First-time setup<br/>1. Check dbvr and that each database can be reached<br/>2. Sign in through a window, never the chat<br/>3. Prove the login can only read data<br/>4. Build the data model"]
+  done -->|No| setup["First-time setup<br/>1. Check dbvr and that each database can be reached<br/>2. Sign in through a window, never the chat<br/>3. Report whether the login can change data<br/>4. Build the data model"]
   setup --> ask
   done -->|Yes| ask["Ask a question in plain English"]
-  ask --> write["The skill writes a SELECT from the data model"]
+  ask --> write["The skill reuses a saved query,<br/>or writes a SELECT from the data model"]
   write --> run["The script refuses anything but SELECT and WITH,<br/>then runs the query through dbvr"]
   run --> verify["Check before sending<br/>Table pasted exactly as returned<br/>Row count from the script, not the agent<br/>Answer uses only values in the table<br/>Column meanings only from the data model or notes"]
   verify --> answer["Answer in the chat:<br/>the exact table, the row count, and the query"]
@@ -111,6 +111,8 @@ That folder holds:
 - `.env` — username and password per database.
 - `dbvr-workspace/` — dbvr’s own workspace. The skill does not use DBeaver’s folders.
 
+The saved-queries file sits next to the data model, named `<data model name>.saved-queries.md`. `paths` prints it as `queries_path`. Like the data model, it stays outside this repo. It holds questions in general words with `{placeholders}`, the tables, column notes, and SQL. It never holds returned data or the values a user typed.
+
 `setup.json` looks like this. `repo_links` is one link per database label. `notes_path` may be empty.
 
 ```json
@@ -138,13 +140,15 @@ If that same message already says Option A or Option B, it skips the menu and us
 
 dbvr is the primary way, on Mac or Windows. You need dbvr 26.2 or newer, the database ports reachable, and your IP allowed by the database firewall. There is no built-in database list. You enter each database (environment, label, server, database name, and port), or you point at a JSON file shaped like `.cursor/skills/sql-from-data-model/scripts/databases.example.json`.
 
-Setup opens one sign-in window per environment. Each database has a username and a password. Paste with ⌘V on Mac and Ctrl+V on Windows. The login is saved only after every database in that run shows reader 1, writer 0, owner 0. That check covers database roles, not permissions granted directly to the login.
+Setup opens one sign-in window per environment. Each database has a username and a password. Paste with ⌘V on Mac and Ctrl+V on Windows. Any login that signs in is saved. Setup still reads each login's database roles, only to report them: when a login can change data, the user sees “That login can change data, but the skill only runs queries that read data.” That report covers database roles, not permissions granted directly to the login. A read-only login plus `VIEW DEFINITION` gives a complete data model; without it the model still works, but rules and defaults are hidden.
 
 An `.env` already saved with `SQL_USER` and `SQL_PASSWORD_<KEY>` keeps working. `SQL_USER_<KEY>` is used when it exists. When it does not, `SQL_USER` is the username. A complete saved login does not open the sign-in windows again.
 
 Setup then builds the data model, one database at a time. After that, a question runs on the database and the answer comes back in the chat.
 
-Queries use `SELECT` and `WITH` only. Every statement must start with `SELECT` or `WITH`. The only `SET` lines allowed are `SET NOCOUNT ON/OFF` and `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED`, which the catalog scripts use. Put values directly in the query, for example `WHERE CustomerId = N'C-1001'`. Do not use `DECLARE` or `@variables`. dbvr runs each statement separately, so a declared variable is lost (SQL Error 137, verified 2026-10-16). The repo source writes queries the same way.
+Queries use `SELECT` and `WITH` only. Every statement must start with `SELECT` or `WITH`. The only `SET` lines allowed are `SET NOCOUNT ON/OFF` and `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED`, which the catalog scripts use. Put values directly in the query, for example `WHERE CustomerId = N'C-1001'`. If a value contains an apostrophe, write it twice, for example `N'O''Brien'`. Do not use `DECLARE` or `@variables`. dbvr runs each statement separately, so a declared variable is lost (SQL Error 137, verified 2026-10-16). The repo source writes queries the same way. The filter also refuses `NEXT VALUE FOR` and a statement that is only a bracketed or double-quoted name, because SQL Server runs a lone name at the start of a batch as a stored procedure.
+
+After a new query runs, the skill quietly saves it to the saved-queries file. The next question of the same kind, with different values, reuses it, and the folded query says “(saved query)”. If you say an answer was wrong, that entry is removed. “Refresh the data model” marks that database's entries to be checked again. “Clear saved queries” deletes the file.
 
 The skill cannot connect to DBeaver, and it does not read DBeaver’s saved passwords.
 
@@ -199,15 +203,15 @@ Also verified on Mac through `.cursor/skills/sql-from-data-model/scripts/sql_log
 |----------|
 ```
 
-`run` sends the SQL file with `-in=<file>` and `-l=100000`. The read-only proof is still one trailing `SELECT`. After the table, `run` prints `ROWS <n>`.
+`run` sends the SQL file with `-in=<file>` and `-l=100000`. After the table, `run` prints `ROWS <n>`. `run` no longer checks the login's roles before each query; the query filter checks every query first. The role check in `setup` is one trailing `SELECT`.
 
 Building the data model through dbvr was verified on 2026-10-19: all seven catalog scripts ran unchanged through `run`, with `--csv`, on four Azure SQL databases.
 
 ## Known limits
 
-`DECLARE` does not work. dbvr runs each statement separately, so a variable declared in one statement is missing in the next (SQL Error 137, verified 2026-10-16). Put the value directly in the query. The script refuses `DECLARE`.
+`DECLARE` does not work. dbvr runs each statement separately, so a variable declared in one statement is missing in the next (SQL Error 137, verified 2026-10-16). Put the value directly in the query. If a value contains an apostrophe, write it twice, for example `N'O''Brien'`. The script refuses `DECLARE`.
 
-Check constraint definitions and index filter definitions can come back empty when the login cannot view object definitions. The data model then lists them as `definition null` and `filter definition not returned`.
+A login without `VIEW DEFINITION` still sees every table and column, but SQL Server hides some metadata from it without an error. When that happens, the data model says so under Identity: “This login cannot view definitions, so check-constraint rules, column defaults and some procedures and functions are not shown. Ask the DBA for VIEW DEFINITION (read-only) for a complete model.” An empty check definition, or a default that exists but is hidden, is listed as `not visible to this login`. A column with no default stays blank. An empty index filter definition is listed as `filter definition not returned`. A column whose user-defined alias type is hidden is listed with its built-in base type.
 
 ## What has not been verified
 
@@ -217,7 +221,9 @@ Check constraint definitions and index filter definitions can come back empty wh
 - These Windows install paths, which are guesses: `%ProgramFiles%\dbvr\dbvr.exe` and `%LOCALAPPDATA%\Programs\dbvr\dbvr.exe`. Windows needs one real test of setup and one query.
 - The Linux sign-in window.
 - The new field list: one username and one password per database. The Mac window mechanism was verified with a shorter field list.
-- The role proof covers database roles only, not permissions granted directly to the login.
+- The “can change data” report covers database roles only, not permissions granted directly to the login.
+- Setup and a query with a login that can change data.
+- The saved-query library: a second question of the same kind reusing a saved query.
 
 ## Verify on a new machine
 
@@ -252,7 +258,7 @@ py -3 .cursor/skills/sql-from-data-model/scripts/sql_login.py init-databases <fi
    - The “Sign in to <environment>” window opens in front. Each database has a username field and a password field.
    - Paste works: ⌘V on Mac, Ctrl+V on Windows. Passwords stay hidden.
    - Cancel saves nothing.
-   - After the last window, each database prints `OK … read-only`, then `SAVED`.
+   - After the last window, each database prints `OK … read-only` or `OK … can change data`, then `SAVED`.
 
 6. Write a short `SELECT` from a table in one of your databases to a file and run it. `<database>` is a database name from your list. A table prints.
 
